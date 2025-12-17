@@ -9,16 +9,21 @@ default_prompts = [
 ]
 
 
+# runs after providers are configured but before server is run
 def install(ctx):
     # helper to get user or default prompts
     def get_user_prompts(request):
         candidate_paths = []
+        # check if user is signed in
         username = ctx.get_username(request)
         if username:
+            # if signed in (Github OAuth), return the prompts for this user if exists
             candidate_paths.append(
                 os.path.join(Path.home(), ".llms", "user", username, "system_prompts", "prompts.json")
             )
+        # return default prompts for all users if exists
         candidate_paths.append(os.path.join(Path.home(), ".llms", "user", "default", "system_prompts", "prompts.json"))
+        # otherwise return the default prompts from this repo
         candidate_paths.append(os.path.join(ctx.path, "ui", "prompts.json"))
 
         # iterate all candidate paths and when exists return its json
@@ -37,4 +42,5 @@ def install(ctx):
     ctx.add_get("prompts.json", get_prompts)
 
 
+# register install extension handler
 __install__ = install
