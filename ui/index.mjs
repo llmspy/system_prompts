@@ -1,6 +1,7 @@
 import { ref, computed, inject, watch, onMounted, onUnmounted, nextTick } from "vue"
+import { AppContext } from "ctx.mjs"
 
-let ext
+const extension = ctx => ctx.scope('system_prompts')
 
 const PromptFinder = {
     template: `
@@ -133,14 +134,11 @@ const PromptFinder = {
 }
 
 const SystemPromptEditor = {
-    components: {
-        PromptFinder,
-    },
     template: `
-    <div class="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-6 pb-4">
+    <div class="border-b border-gray-200 dark:border-gray-700 px-6 pb-4">
         <div class="max-w-6xl mx-auto">
             <div class="mt-2 h-10 flex justify-between items-center">
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label class="select-none block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     System Prompt
                 </label>
                 <div v-if="hasMessages" class="text-sm text-gray-500 dark:text-gray-400">
@@ -185,12 +183,14 @@ const SystemPromptEditor = {
         modelValue: String,
     },
     setup(props, { emit }) {
+        /**@type {AppContext} */
         const ctx = inject('ctx')
         const containerRef = ref()
         const showFinder = ref(false)
-        const prefs = ext.storageObject()
-        const hasMessages = computed(() => ctx.getCurrentThread()?.messages?.length > 0)
-        const threadSystemPrompt = computed(() => ctx.getCurrentThread()?.systemPrompt || '')
+        const ext = extension(ctx)
+        const prefs = ext.getPrefs()
+        const hasMessages = computed(() => ctx.threads.currentThread.value?.messages?.length > 0)
+        const threadSystemPrompt = computed(() => ctx.threads.currentThread.value?.systemPrompt || '')
         const selected = computed(() =>
             props.prompts.find(x => x.value === props.modelValue) ?? { name: "Custom", value: props.modelValue })
 
@@ -206,7 +206,7 @@ const SystemPromptEditor = {
 
         watch(() => props.modelValue, promptValue => {
             prefs.prompt = selected.value
-            ext.storageObject(prefs)
+            ext.setPrefs(prefs)
         })
 
         onMounted(() => {
@@ -234,31 +234,25 @@ export default {
     install(ctx) {
 
         ctx.components({
+            PromptFinder,
+            SystemPromptEditor,
             SystemPromptsPanel: {
-                components: {
-                    SystemPromptEditor,
+                template: `<SystemPromptEditor :prompts="$state.prompts" v-model="$state.selectedPrompt" />`,
+            }
+        })
+
+        ctx.setTopIcons({
+            system_prompts: {
+                component: {
+                    template: `<svg @click="$ctx.toggleTop('SystemPromptsPanel')" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m5 7l5 5l-5 5m8 0h6"/></svg>`,
                 },
-                template: `
-                    <SystemPromptEditor :prompts="$state.prompts" v-model="$state.selectedPrompt" />
-                `,
-                setup() {
-                }
+                isActive({ top }) { return top === 'SystemPromptsPanel' }
             }
         })
 
-        const id = `system_prompts`
-        ext = ctx.extension({
-            id,
-            topBarIcon: {
-                template: `<svg @click="$ctx.toggleLayout({ top:'SystemPromptsPanel' })" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m5 7l5 5l-5 5m8 0h6"/></svg>`,
-            },
-            isActive(layout) {
-                return layout === 'SystemPromptsPanel'
-            }
-        })
-
+        const ext = extension(ctx)
         ctx.createThreadFilters.push(thread => {
-            const prefs = ext.storageObject()
+            const prefs = ext.getPrefs()
             thread.systemPrompt = prefs?.prompt?.value || ""
             console.log('createThreadFilters', prefs, thread)
         })
@@ -280,10 +274,12 @@ export default {
             }
         })
 
-        fetch(`${ext.baseUrl}/prompts.json`)
-            .then(r => r.json())
-            .then(prompts => {
-                ctx.setState({ prompts })
-            })
+        ctx.setState({ prompts: [] })
+    },
+
+    async load(ctx) {
+        const ext = extension(ctx)
+        const prompts = await ext.getJson(`/prompts.json`)
+        ctx.setState({ prompts })
     }
 }
