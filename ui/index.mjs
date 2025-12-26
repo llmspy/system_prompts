@@ -1,7 +1,7 @@
 import { ref, computed, inject, watch, onMounted, onUnmounted, nextTick } from "vue"
 import { AppContext } from "ctx.mjs"
 
-const extension = ctx => ctx.scope('system_prompts')
+let ext
 
 const PromptFinder = {
     template: `
@@ -187,7 +187,6 @@ const SystemPromptEditor = {
         const ctx = inject('ctx')
         const containerRef = ref()
         const showFinder = ref(false)
-        const ext = extension(ctx)
         const prefs = ext.getPrefs()
         const hasMessages = computed(() => ctx.threads.currentThread.value?.messages?.length > 0)
         const threadSystemPrompt = computed(() => ctx.threads.currentThread.value?.systemPrompt || '')
@@ -232,7 +231,7 @@ const SystemPromptEditor = {
 
 export default {
     install(ctx) {
-
+        ext = ctx.scope('system_prompts')
         ctx.components({
             PromptFinder,
             SystemPromptEditor,
@@ -250,7 +249,6 @@ export default {
             }
         })
 
-        const ext = extension(ctx)
         ctx.createThreadFilters.push(thread => {
             const prefs = ext.getPrefs()
             thread.systemPrompt = prefs?.prompt?.value || ""
@@ -278,7 +276,6 @@ export default {
     },
 
     async load(ctx) {
-        const ext = extension(ctx)
         const prompts = await ext.getJson(`/prompts.json`)
         ctx.setState({ prompts })
     }
